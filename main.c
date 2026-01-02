@@ -15,9 +15,11 @@ int main(void) {
     grid_toggle_cell(&grid, 2, 1);
     grid_toggle_cell(&grid, 2, 2);
 
-    grid_print(&grid);
-    refresh();
-    getch();
+    do {
+        grid_print(&grid);
+        refresh();
+        grid_simulate(&grid);
+    } while (getch() != 'q');
 
     grid_free(&grid);
     endwin();
