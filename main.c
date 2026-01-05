@@ -1,34 +1,28 @@
 #include "grid.h"
 #include <ncurses.h>
+#include <time.h>
 
-typedef enum { PAUSE, PLAY, QUIT } State;
+typedef enum { EDIT, PLAY, QUIT } State;
 
-static void handle_input(void);
-static void toggle_pause(void);
+static void init(void);
+static void draw(const Grid *grid);
+static void handle_input(Grid *grid);
+static void handle_input_edit(Grid *grid, const int ch);
+static void toggle_edit_play(void);
 
-State state = PAUSE;
+static const int DEFAULT_TIMEOUT_MS = 250;
+
+static State state  = EDIT;
+static int cursor_y = 0;
+static int cursor_x = 0;
 
 int main(void) {
-    initscr();
-    noecho();
-
-    Grid grid = grid_init(10, 10);
-
-    // glider
-    grid_toggle_cell(&grid, 0, 1);
-    grid_toggle_cell(&grid, 1, 2);
-    grid_toggle_cell(&grid, 2, 0);
-    grid_toggle_cell(&grid, 2, 1);
-    grid_toggle_cell(&grid, 2, 2);
+    init();
+    Grid grid = grid_init(getmaxy(stdscr), getmaxx(stdscr));
 
     while (state != QUIT) {
-        grid_print(&grid);
-        refresh();
-
-        handle_input();
-
-        grid_simulate(&grid);
-        if (state == PLAY) napms(500);
+        draw(&grid);
+        handle_input(&grid);
     }
 
     grid_free(&grid);
@@ -36,23 +30,75 @@ int main(void) {
     return EXIT_SUCCESS;
 }
 
-static void handle_input(void) {
-    int ch;
-
-    do {
-        switch (ch = getch()) {
-            case 'q':
-                state = QUIT;
-                break;
-            case ' ':
-                toggle_pause();
-                break;
-        }
-    } while (state == PLAY && ch != ERR);
+static void init(void) {
+    srand(time(NULL));
+    initscr();
+    noecho();
+    keypad(stdscr, true);
 }
 
-static void toggle_pause(void) {
-    state = state == PAUSE ? PLAY : PAUSE;
-    curs_set(state == PAUSE ? 1 : 0);
-    nodelay(stdscr, state != PAUSE);
+static void draw(const Grid *grid) {
+    erase();
+    grid_draw(grid);
+    move(cursor_y, cursor_x);
+    refresh();
+}
+
+static void handle_input(Grid *grid) {
+    const int ch = getch();
+
+    if (state == EDIT) handle_input_edit(grid, ch);
+
+    switch (ch) {
+        case 'q':
+            state = QUIT;
+            break;
+        case 'c':
+            grid_clear(grid);
+            break;
+        case 'r':
+            grid_randomize(grid);
+            break;
+        case ' ':
+            toggle_edit_play();
+            break;
+        case 'n':
+        case ERR:
+            grid_simulate(grid);
+            break;
+    }
+}
+
+static void handle_input_edit(Grid *grid, const int ch) {
+    switch (ch) {
+        case '\n':
+        case 's':
+            grid_toggle_cell(grid, cursor_y, cursor_x);
+            break;
+        case KEY_LEFT:
+        case 'h':
+            cursor_x--;
+            break;
+        case KEY_DOWN:
+        case 'j':
+            cursor_y++;
+            break;
+        case KEY_UP:
+        case 'k':
+            cursor_y--;
+            break;
+        case KEY_RIGHT:
+        case 'l':
+            cursor_x++;
+            break;
+    }
+
+    cursor_y = wrap(cursor_y, grid->rows);
+    cursor_x = wrap(cursor_x, grid->cols);
+}
+
+static void toggle_edit_play(void) {
+    state = state == EDIT ? PLAY : EDIT;
+    curs_set(state == EDIT ? 1 : 0);
+    timeout(state == EDIT ? -1 : DEFAULT_TIMEOUT_MS);
 }
