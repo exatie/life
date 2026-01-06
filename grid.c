@@ -20,8 +20,8 @@ Grid grid_init(const size_t rows, const size_t cols) {
         .cells       = cells,
         .front_cells = cells,
         .back_cells  = cells + rows * cols,
-        .rows = rows,
-        .cols = cols,
+        .rows        = rows,
+        .cols        = cols,
     };
 }
 

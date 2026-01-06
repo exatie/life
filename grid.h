@@ -5,11 +5,11 @@
 #include <stdlib.h>
 
 typedef struct Grid {
-    bool *cells;
-    bool *front_cells;
-    bool *back_cells;
-    const size_t rows;
-    const size_t cols;
+    bool   *cells;
+    bool   *front_cells;
+    bool   *back_cells;
+    size_t  rows;
+    size_t  cols;
 } Grid;
 
 int  wrap(int n, const int ceiling);
