@@ -12,13 +12,13 @@ typedef struct Grid {
     size_t  cols;
 } Grid;
 
-int  wrap(int n, const int ceiling);
-Grid grid_init(const size_t rows, const size_t cols);
+int  wrap(int n, int ceiling);
+Grid grid_init(size_t rows, size_t cols);
 void grid_free(Grid *grid);
-void grid_draw(const Grid *grid);
-void grid_toggle_cell(Grid *grid, const int y, const int x);
+void grid_evolve(Grid *grid);
 void grid_clear(Grid *grid);
 void grid_randomize(Grid *grid);
-void grid_simulate(Grid *grid);
+void grid_toggle_cell(Grid *grid, int y, int x);
+void grid_print(const Grid *grid);
 
 #endif // GRID_H

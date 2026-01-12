@@ -2,10 +2,10 @@
 #include <ncurses.h>
 #include <string.h>
 
-static int grid_count_neighbors(const Grid *grid, const int cy, const int cx);
+static int grid_count_neighbors(const Grid *grid, int cy, int cx);
 
 int wrap(int n, const int ceiling) {
-    const int FLOOR = 0;
+    static const int FLOOR = 0;
 
     n %= ceiling;
     if (n < FLOOR) n += ceiling;
@@ -33,46 +33,13 @@ void grid_free(Grid *grid) {
     grid->back_cells  = NULL;
 }
 
-void grid_draw(const Grid *grid) {
-    const char ALIVE = '#';
-
+void grid_evolve(Grid *grid) {
     for (size_t y = 0; y < grid->rows; y++) {
         for (size_t x = 0; x < grid->cols; x++) {
-            const bool is_alive = grid->front_cells[y * grid->cols + x];
-            if (is_alive) mvaddch(y, x, ALIVE);
-        }
-    }
-}
-
-void grid_toggle_cell(Grid *grid, const int y, const int x) {
-    const bool is_alive = grid->front_cells[y * grid->cols + x];
-    grid->front_cells[y * grid->cols + x] = !is_alive;
-}
-
-void grid_clear(Grid *grid) {
-    memset(
-        grid->front_cells,
-        false,
-        grid->rows * grid->cols * sizeof *grid->front_cells
-    );
-}
-
-void grid_randomize(Grid *grid) {
-    for (size_t y = 0; y < grid->rows; y++) {
-        for (size_t x = 0; x < grid->cols; x++) {
-            grid->front_cells[y * grid->cols + x] = rand() % 2;
-        }
-    }
-}
-
-void grid_simulate(Grid *grid) {
-    for (size_t y = 0; y < grid->rows; y++) {
-        for (size_t x = 0; x < grid->cols; x++) {
-            const int neighbors = grid_count_neighbors(grid, y, x);
-
+            const int  neighbors = grid_count_neighbors(grid, y, x);
             const bool is_alive  = grid->front_cells[y * grid->cols + x];
-            const bool will_live = neighbors==3 || (neighbors==2 && is_alive);
 
+            const bool will_live = neighbors==3 || (neighbors==2 && is_alive);
             grid->back_cells[y * grid->cols + x] = will_live;
         }
     }
@@ -97,4 +64,33 @@ static int grid_count_neighbors(const Grid *grid, const int cy, const int cx) {
     }
 
     return result;
+}
+
+void grid_clear(Grid *grid) {
+    memset(
+        grid->front_cells,
+        false,
+        grid->rows * grid->cols * sizeof *grid->front_cells
+    );
+}
+
+void grid_randomize(Grid *grid) {
+    for (size_t y = 0; y < grid->rows; y++) {
+        for (size_t x = 0; x < grid->cols; x++) {
+            grid->front_cells[y * grid->cols + x] = rand() % 2;
+        }
+    }
+}
+
+void grid_toggle_cell(Grid *grid, const int y, const int x) {
+    const bool is_alive = grid->front_cells[y * grid->cols + x];
+    grid->front_cells[y * grid->cols + x] = !is_alive;
+}
+
+void grid_print(const Grid *grid) {
+    for (size_t y = 0; y < grid->rows; y++) {
+        for (size_t x = 0; x < grid->cols; x++) {
+            if (grid->front_cells[y * grid->cols + x]) mvaddch(y, x, '#');
+        }
+    }
 }

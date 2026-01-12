@@ -2,35 +2,38 @@
 #include <ncurses.h>
 #include <time.h>
 
-typedef enum { RESET, DECREASE, INCREASE } Change;
+typedef enum { RESET, DECREASE, INCREASE } TimeoutAdjustment;
 
 static void init(void);
 static void clean_up(void);
-static void draw(void);
-static void draw_footer(void);
-static void handle_input(void);
-static void change_timeout_ms(const Change change);
+static void handle_input_global(int ch);
+static void handle_input_edit(int ch);
+static void evolve_life(void);
 static void toggle_mode(void);
+static void adjust_timeout_ms(TimeoutAdjustment adjustment);
+static void print(void);
+static void print_status_bar(void);
 
-static const int DEFAULT_TIMEOUT_MS = 250;
-static const int FOOTER_HEIGHT      = 1;
+static const int TIMEOUT_MS_DEFAULT = 250;
+static const int STATUS_BAR_HEIGHT  = 1;
 
+static Grid     grid;
 static bool     running    = true;
 static bool     edit_mode  = true;
-static int      timeout_ms = DEFAULT_TIMEOUT_MS;
+static int      timeout_ms = TIMEOUT_MS_DEFAULT;
 static unsigned generation = 0;
 static int      cursor_y   = 0;
 static int      cursor_x   = 0;
-static int      max_y;
-static int      max_x;
-static Grid     grid;
 
 int main(void) {
     init();
 
     while (running) {
-        draw();
-        handle_input();
+        print();
+
+        const int ch = getch();
+        handle_input_global(ch);
+        if (edit_mode) handle_input_edit(ch);
     }
 
     clean_up();
@@ -40,10 +43,10 @@ int main(void) {
 static void init(void) {
     srand(time(NULL));
     initscr();
+    cbreak();
     noecho();
     keypad(stdscr, true);
-    getmaxyx(stdscr, max_y, max_x);
-    grid = grid_init(max_y - FOOTER_HEIGHT, max_x);
+    grid = grid_init(LINES - STATUS_BAR_HEIGHT, COLS);
 }
 
 static void clean_up(void) {
@@ -51,35 +54,18 @@ static void clean_up(void) {
     endwin();
 }
 
-static void draw(void) {
-    erase();
-    grid_draw(&grid);
-    draw_footer();
-    move(cursor_y, cursor_x);
-    refresh();
-}
-
-static void draw_footer(void) {
-    const int footer_y     = max_y - FOOTER_HEIGHT;
-    const int mode_x       = 0;
-    const int generation_x = 17;
-    const int cursor_pos_x = max_x - 18;
-    const int timeout_x    = max_x - 6;
-
-    mvaddstr(footer_y, mode_x,       edit_mode ? "-- EDIT --" : "-- PLAY --");
-    mvprintw(footer_y, generation_x, "GEN %u", generation);
-    mvprintw(footer_y, cursor_pos_x, "%d,%d",  cursor_y, cursor_x);
-    mvprintw(footer_y, timeout_x,    "%4dms",   timeout_ms);
-
-    mvchgat(footer_y, 0, max_x, A_REVERSE, 0, NULL);
-}
-
-static void handle_input(void) {
-    const int ch = getch();
-
+static void handle_input_global(const int ch) {
     switch (ch) {
         case 'q':
             running = false;
+            break;
+        case 'n':
+        case ERR:
+            evolve_life();
+            break;
+        case 'p':
+        case ' ':
+            toggle_mode();
             break;
         case 'c':
             generation = 0;
@@ -90,78 +76,99 @@ static void handle_input(void) {
             grid_randomize(&grid);
             break;
         case '0':
-            change_timeout_ms(RESET);
+            adjust_timeout_ms(RESET);
             break;
         case '-':
-            change_timeout_ms(DECREASE);
+            adjust_timeout_ms(DECREASE);
             break;
         case '=':
-            change_timeout_ms(INCREASE);
+            adjust_timeout_ms(INCREASE);
             break;
-        case ' ':
-            toggle_mode();
-            if (edit_mode) break;
-            [[fallthrough]];
-        case 'n':
-        case ERR:
-            generation++;
-            grid_simulate(&grid);
-            break;
-    }
-
-    if (edit_mode) {
-        switch (ch) {
-            case '\n':
-            case 's':
-                grid_toggle_cell(&grid, cursor_y, cursor_x);
-                break;
-            case KEY_LEFT:
-            case 'h':
-                cursor_x--;
-                break;
-            case KEY_DOWN:
-            case 'j':
-                cursor_y++;
-                break;
-            case KEY_UP:
-            case 'k':
-                cursor_y--;
-                break;
-            case KEY_RIGHT:
-            case 'l':
-                cursor_x++;
-                break;
-        }
-
-        cursor_y = wrap(cursor_y, grid.rows);
-        cursor_x = wrap(cursor_x, grid.cols);
     }
 }
 
-static void change_timeout_ms(const Change change) {
-    const int MIN_TIMEOUT_MS   = 50;
-    const int MAX_TIMEOUT_MS   = 1000;
-    const int TIMEOUT_MS_DELTA = 50;
+static void handle_input_edit(const int ch) {
+    switch (ch) {
+        case 's':
+        case '\n':
+            grid_toggle_cell(&grid, cursor_y, cursor_x);
+            break;
+        case 'h':
+        case KEY_LEFT:
+            cursor_x--;
+            break;
+        case 'j':
+        case KEY_DOWN:
+            cursor_y++;
+            break;
+        case 'k':
+        case KEY_UP:
+            cursor_y--;
+            break;
+        case 'l':
+        case KEY_RIGHT:
+            cursor_x++;
+            break;
+    }
 
-    switch (change) {
+    cursor_y = wrap(cursor_y, grid.rows);
+    cursor_x = wrap(cursor_x, grid.cols);
+}
+
+static void evolve_life(void) {
+    generation++;
+    grid_evolve(&grid);
+}
+
+static void toggle_mode(void) {
+    edit_mode = !edit_mode;
+    curs_set(edit_mode ? 1 : 0);
+    timeout(edit_mode ? -1 : timeout_ms);
+
+    if (!edit_mode) evolve_life();
+}
+
+static void adjust_timeout_ms(const TimeoutAdjustment adjustment) {
+    static const int TIMEOUT_MS_MIN   = 50;
+    static const int TIMEOUT_MS_MAX   = 1000;
+    static const int TIMEOUT_MS_DELTA = 50;
+
+    switch (adjustment) {
         case RESET:
-            timeout_ms = DEFAULT_TIMEOUT_MS;
+            timeout_ms = TIMEOUT_MS_DEFAULT;
             break;
         case DECREASE:
             timeout_ms -= TIMEOUT_MS_DELTA;
-            if (timeout_ms < MIN_TIMEOUT_MS) timeout_ms = MIN_TIMEOUT_MS;
+            if (timeout_ms < TIMEOUT_MS_MIN) timeout_ms = TIMEOUT_MS_MIN;
             break;
         case INCREASE:
             timeout_ms += TIMEOUT_MS_DELTA;
-            if (timeout_ms > MAX_TIMEOUT_MS) timeout_ms = MAX_TIMEOUT_MS;
+            if (timeout_ms > TIMEOUT_MS_MAX) timeout_ms = TIMEOUT_MS_MAX;
             break;
     }
 
     if (!edit_mode) timeout(timeout_ms);
 }
 
-static void toggle_mode(void) {
-    edit_mode = !edit_mode;
-    curs_set(edit_mode);
-    timeout(edit_mode ? -1 : timeout_ms);
+static void print(void) {
+    erase();
+    grid_print(&grid);
+    print_status_bar();
+    move(cursor_y, cursor_x);
+    refresh();
+}
+
+static void print_status_bar(void) {
+    const int bar_y        = LINES - STATUS_BAR_HEIGHT;
+    const int mode_x       = 0;
+    const int generation_x = 17;
+    const int cursor_pos_x = COLS - 18;
+    const int timeout_x    = COLS - 6;
+
+    mvaddstr(bar_y, mode_x,       edit_mode ? "-- EDIT --" : "-- PLAY --");
+    mvprintw(bar_y, generation_x, "GEN %u", generation);
+    mvprintw(bar_y, cursor_pos_x, "%d,%d",  cursor_y, cursor_x);
+    mvprintw(bar_y, timeout_x,    "%4dms",  timeout_ms);
+
+    mvchgat(bar_y, 0, COLS, A_REVERSE, 0, NULL);
 }
