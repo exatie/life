@@ -33,6 +33,30 @@ void grid_free(Grid *grid) {
     grid->back_cells  = NULL;
 }
 
+void grid_resize(Grid *grid, const size_t new_rows, const size_t new_cols) {
+    if (new_rows == grid->rows && new_cols == grid->cols) return;
+
+    bool *new_cells = calloc(2 * new_rows * new_cols, sizeof *new_cells);
+    if (!new_cells) abort();
+
+    const size_t copy_rows = new_rows < grid->rows ? new_rows : grid->rows;
+    const size_t copy_cols = new_cols < grid->cols ? new_cols : grid->cols;
+
+    for (size_t y = 0; y < copy_rows; y++) {
+        for (size_t x = 0; x < copy_cols; x++) {
+            new_cells[y * new_cols + x] = grid->front_cells[y * grid->cols + x];
+        }
+    }
+
+    free(grid->cells);
+
+    grid->cells       = new_cells;
+    grid->front_cells = new_cells;
+    grid->back_cells  = new_cells + new_rows * new_cols;
+    grid->rows        = new_rows;
+    grid->cols        = new_cols;
+}
+
 void grid_evolve(Grid *grid) {
     for (size_t y = 0; y < grid->rows; y++) {
         for (size_t x = 0; x < grid->cols; x++) {

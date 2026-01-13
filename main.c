@@ -56,6 +56,9 @@ static void clean_up(void) {
 
 static void handle_input_global(const int ch) {
     switch (ch) {
+        case KEY_RESIZE:
+            grid_resize(&grid, LINES - STATUS_BAR_HEIGHT, COLS);
+            break;
         case 'q':
             running = false;
             break;
@@ -161,7 +164,7 @@ static void print(void) {
 static void print_status_bar(void) {
     const int bar_y        = LINES - STATUS_BAR_HEIGHT;
     const int mode_x       = 0;
-    const int generation_x = 17;
+    const int generation_x = 13;
     const int cursor_pos_x = COLS - 18;
     const int timeout_x    = COLS - 6;
 
