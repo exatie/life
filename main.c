@@ -8,6 +8,7 @@ static void init(void);
 static void clean_up(void);
 static void handle_input_global(int ch);
 static void handle_input_edit(int ch);
+static void handle_resize(void);
 static void toggle_mode(void);
 static void adjust_timeout_ms(TimeoutAdjustment adjustment);
 static void print(void);
@@ -60,6 +61,10 @@ static void clean_up(void) {
 
 static void handle_input_global(const int ch) {
     switch (ch) {
+        case KEY_RESIZE:
+            handle_resize();
+            break;
+
         case 'q':
             running = false;
             break;
@@ -77,9 +82,6 @@ static void handle_input_global(const int ch) {
             adjust_timeout_ms(INCREASE);
             break;
 
-        case KEY_RESIZE:
-            grid_resize(&grid, LINES - STATUS_BAR_HEIGHT, COLS);
-            break;
         case 'n':
         case ERR:
             grid_evolve(&grid);
@@ -125,6 +127,13 @@ static void handle_input_edit(const int ch) {
 
     cursor_y = wrap(cursor_y, grid.rows);
     cursor_x = wrap(cursor_x, grid.cols);
+}
+
+static void handle_resize(void) {
+    grid_resize(&grid, LINES - STATUS_BAR_HEIGHT, COLS);
+
+    if (cursor_y >= (int)grid.rows) cursor_y = grid.rows - 1;
+    if (cursor_x >= (int)grid.cols) cursor_x = grid.cols - 1;
 }
 
 static void toggle_mode(void) {
