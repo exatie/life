@@ -8,7 +8,6 @@ static void init(void);
 static void clean_up(void);
 static void handle_input_global(int ch);
 static void handle_input_edit(int ch);
-static void evolve_life(void);
 static void toggle_mode(void);
 static void adjust_timeout_ms(TimeoutAdjustment adjustment);
 static void print(void);
@@ -17,13 +16,14 @@ static void print_status_bar(void);
 static const int TIMEOUT_MS_DEFAULT = 250;
 static const int STATUS_BAR_HEIGHT  = 1;
 
+static bool running    = true;
+static bool edit_mode  = true;
+static int  timeout_ms = TIMEOUT_MS_DEFAULT;
+static int  cursor_y   = 0;
+static int  cursor_x   = 0;
+
 static Grid     grid;
-static bool     running    = true;
-static bool     edit_mode  = true;
-static int      timeout_ms = TIMEOUT_MS_DEFAULT;
-static unsigned generation = 0;
-static int      cursor_y   = 0;
-static int      cursor_x   = 0;
+static GridSave save;
 
 int main(void) {
     init();
@@ -46,38 +46,27 @@ static void init(void) {
     cbreak();
     noecho();
     keypad(stdscr, true);
+
     grid = grid_init(LINES - STATUS_BAR_HEIGHT, COLS);
+    save = grid_save_init();
 }
 
 static void clean_up(void) {
+    grid_save_free(&save);
     grid_free(&grid);
+
     endwin();
 }
 
 static void handle_input_global(const int ch) {
     switch (ch) {
-        case KEY_RESIZE:
-            grid_resize(&grid, LINES - STATUS_BAR_HEIGHT, COLS);
-            break;
         case 'q':
             running = false;
             break;
-        case 'n':
-        case ERR:
-            evolve_life();
-            break;
-        case 'p':
         case ' ':
             toggle_mode();
             break;
-        case 'c':
-            generation = 0;
-            grid_clear(&grid);
-            break;
-        case 'r':
-            generation = 0;
-            grid_randomize(&grid);
-            break;
+
         case '0':
             adjust_timeout_ms(RESET);
             break;
@@ -86,6 +75,26 @@ static void handle_input_global(const int ch) {
             break;
         case '=':
             adjust_timeout_ms(INCREASE);
+            break;
+
+        case KEY_RESIZE:
+            grid_resize(&grid, LINES - STATUS_BAR_HEIGHT, COLS);
+            break;
+        case 'n':
+        case ERR:
+            grid_evolve(&grid);
+            break;
+        case 'c':
+            grid_clear(&grid);
+            break;
+        case 'r':
+            grid_randomize(&grid);
+            break;
+        case 'y':
+            grid_save(&grid, &save);
+            break;
+        case 'p':
+            grid_load(&grid, &save);
             break;
     }
 }
@@ -118,17 +127,12 @@ static void handle_input_edit(const int ch) {
     cursor_x = wrap(cursor_x, grid.cols);
 }
 
-static void evolve_life(void) {
-    generation++;
-    grid_evolve(&grid);
-}
-
 static void toggle_mode(void) {
     edit_mode = !edit_mode;
     curs_set(edit_mode ? 1 : 0);
     timeout(edit_mode ? -1 : timeout_ms);
 
-    if (!edit_mode) evolve_life();
+    if (!edit_mode) grid_evolve(&grid);
 }
 
 static void adjust_timeout_ms(const TimeoutAdjustment adjustment) {
@@ -169,7 +173,7 @@ static void print_status_bar(void) {
     const int timeout_x    = COLS - 6;
 
     mvaddstr(bar_y, mode_x,       edit_mode ? "-- EDIT --" : "-- PLAY --");
-    mvprintw(bar_y, generation_x, "GEN %u", generation);
+    mvprintw(bar_y, generation_x, "GEN %u", grid.generation);
     mvprintw(bar_y, cursor_pos_x, "%d,%d",  cursor_y, cursor_x);
     mvprintw(bar_y, timeout_x,    "%4dms",  timeout_ms);
 

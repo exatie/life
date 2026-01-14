@@ -2,6 +2,8 @@
 #include <ncurses.h>
 #include <string.h>
 
+static inline size_t min(size_t a, size_t b) { return a < b ? a : b; }
+
 static int grid_count_neighbors(const Grid *grid, int cy, int cx);
 
 int wrap(int n, const int ceiling) {
@@ -22,6 +24,7 @@ Grid grid_init(const size_t rows, const size_t cols) {
         .back_cells  = cells + rows * cols,
         .rows        = rows,
         .cols        = cols,
+        .generation  = 0,
     };
 }
 
@@ -39,12 +42,12 @@ void grid_resize(Grid *grid, const size_t new_rows, const size_t new_cols) {
     bool *new_cells = calloc(2 * new_rows * new_cols, sizeof *new_cells);
     if (!new_cells) abort();
 
-    const size_t copy_rows = new_rows < grid->rows ? new_rows : grid->rows;
-    const size_t copy_cols = new_cols < grid->cols ? new_cols : grid->cols;
+    const size_t copy_rows = min(new_rows, grid->rows);
+    const size_t copy_cols = min(new_cols, grid->cols);
 
     for (size_t y = 0; y < copy_rows; y++) {
         for (size_t x = 0; x < copy_cols; x++) {
-            new_cells[y * new_cols + x] = grid->front_cells[y * grid->cols + x];
+            new_cells[y*new_cols+x] = grid->front_cells[y*grid->cols+x];
         }
     }
 
@@ -61,16 +64,18 @@ void grid_evolve(Grid *grid) {
     for (size_t y = 0; y < grid->rows; y++) {
         for (size_t x = 0; x < grid->cols; x++) {
             const int  neighbors = grid_count_neighbors(grid, y, x);
-            const bool is_alive  = grid->front_cells[y * grid->cols + x];
+            const bool is_alive  = grid->front_cells[y*grid->cols+x];
 
             const bool will_live = neighbors==3 || (neighbors==2 && is_alive);
-            grid->back_cells[y * grid->cols + x] = will_live;
+            grid->back_cells[y*grid->cols+x] = will_live;
         }
     }
 
     bool *tmp         = grid->front_cells;
     grid->front_cells = grid->back_cells;
     grid->back_cells  = tmp;
+
+    grid->generation++;
 }
 
 static int grid_count_neighbors(const Grid *grid, const int cy, const int cx) {
@@ -83,7 +88,7 @@ static int grid_count_neighbors(const Grid *grid, const int cy, const int cx) {
             const int x = wrap(cx + dx, grid->cols);
             if (y == cy && x == cx) continue;
 
-            if (grid->front_cells[y * grid->cols + x]) result++;
+            if (grid->front_cells[y*grid->cols+x]) result++;
         }
     }
 
@@ -96,25 +101,78 @@ void grid_clear(Grid *grid) {
         false,
         grid->rows * grid->cols * sizeof *grid->front_cells
     );
+
+    grid->generation = 0;
 }
 
 void grid_randomize(Grid *grid) {
     for (size_t y = 0; y < grid->rows; y++) {
         for (size_t x = 0; x < grid->cols; x++) {
-            grid->front_cells[y * grid->cols + x] = rand() % 2;
+            grid->front_cells[y*grid->cols+x] = rand() % 2;
         }
     }
+
+    grid->generation = 0;
 }
 
 void grid_toggle_cell(Grid *grid, const int y, const int x) {
-    const bool is_alive = grid->front_cells[y * grid->cols + x];
-    grid->front_cells[y * grid->cols + x] = !is_alive;
+    const bool is_alive = grid->front_cells[y*grid->cols+x];
+    grid->front_cells[y*grid->cols+x] = !is_alive;
 }
 
 void grid_print(const Grid *grid) {
     for (size_t y = 0; y < grid->rows; y++) {
         for (size_t x = 0; x < grid->cols; x++) {
-            if (grid->front_cells[y * grid->cols + x]) mvaddch(y, x, '#');
+            if (grid->front_cells[y*grid->cols+x]) mvaddch(y, x, '#');
         }
     }
+}
+
+GridSave grid_save_init(void) {
+    return (GridSave){
+        .cells      = NULL,
+        .rows       = 0,
+        .cols       = 0,
+        .generation = 0,
+    };
+}
+
+void grid_save_free(GridSave *save) {
+    free(save->cells);
+    save->cells = NULL;
+}
+
+void grid_save(const Grid *grid, GridSave *save) {
+    free(save->cells);
+
+    const size_t size = grid->rows * grid->cols * sizeof *grid->cells;
+
+    save->cells = malloc(size);
+    if (!save->cells) abort();
+
+    memcpy(save->cells, grid->front_cells, size);
+    save->rows       = grid->rows;
+    save->cols       = grid->cols;
+    save->generation = grid->generation;
+}
+
+void grid_load(Grid *grid, const GridSave *save) {
+    if (!save->cells) return;
+
+    memset(
+        grid->front_cells,
+        false,
+        grid->rows * grid->cols * sizeof *grid->front_cells
+    );
+
+    const size_t copy_rows = min(save->rows, grid->rows);
+    const size_t copy_cols = min(save->cols, grid->cols);
+
+    for (size_t y = 0; y < copy_rows; y++) {
+        for (size_t x = 0; x < copy_cols; x++) {
+            grid->front_cells[y*grid->cols+x] = save->cells[y*save->cols+x];
+        }
+    }
+
+    grid->generation = save->generation;
 }
