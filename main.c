@@ -9,6 +9,7 @@ static void clean_up(void);
 static void handle_input_global(int ch);
 static void handle_input_edit(int ch);
 static void handle_resize(void);
+static void reset_grid(void);
 static void toggle_mode(void);
 static void adjust_timeout_ms(TimeoutAdjustment adjustment);
 static void print(void);
@@ -64,30 +65,15 @@ static void handle_input_global(const int ch) {
         case KEY_RESIZE:
             handle_resize();
             break;
-
-        case 'q':
-            running = false;
+        case ERR:
+        case 'n':
+            grid_evolve(&grid);
             break;
         case ' ':
             toggle_mode();
             break;
-
-        case '0':
-            adjust_timeout_ms(RESET);
-            break;
-        case '-':
-            adjust_timeout_ms(DECREASE);
-            break;
-        case '=':
-            adjust_timeout_ms(INCREASE);
-            break;
-
-        case 'n':
-        case ERR:
-            grid_evolve(&grid);
-            break;
         case 'c':
-            grid_clear(&grid);
+            reset_grid();
             break;
         case 'r':
             grid_randomize(&grid);
@@ -97,6 +83,18 @@ static void handle_input_global(const int ch) {
             break;
         case 'p':
             grid_load(&grid, &save);
+            break;
+        case '0':
+            adjust_timeout_ms(RESET);
+            break;
+        case '-':
+            adjust_timeout_ms(DECREASE);
+            break;
+        case '=':
+            adjust_timeout_ms(INCREASE);
+            break;
+        case 'q':
+            running = false;
             break;
     }
 }
@@ -134,6 +132,11 @@ static void handle_resize(void) {
 
     if (cursor_y >= (int)grid.rows) cursor_y = grid.rows - 1;
     if (cursor_x >= (int)grid.cols) cursor_x = grid.cols - 1;
+}
+
+static void reset_grid(void) {
+    if (!edit_mode) toggle_mode();
+    grid_clear(&grid);
 }
 
 static void toggle_mode(void) {
