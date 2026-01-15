@@ -2,7 +2,13 @@
 #include <ncurses.h>
 #include <time.h>
 
-typedef enum { RESET, DECREASE, INCREASE } TimeoutAdjustment;
+typedef enum {
+    SET_DEFAULT,
+    SET_MIN,
+    SET_MAX,
+    DECREASE,
+    INCREASE,
+} TimeoutAdjustment;
 
 static void init(void);
 static void clean_up(void);
@@ -85,7 +91,13 @@ static void handle_input_global(const int ch) {
             grid_load(&grid, &save);
             break;
         case '0':
-            adjust_timeout_ms(RESET);
+            adjust_timeout_ms(SET_DEFAULT);
+            break;
+        case '_':
+            adjust_timeout_ms(SET_MIN);
+            break;
+        case '+':
+            adjust_timeout_ms(SET_MAX);
             break;
         case '-':
             adjust_timeout_ms(DECREASE);
@@ -148,20 +160,25 @@ static void toggle_mode(void) {
 }
 
 static void adjust_timeout_ms(const TimeoutAdjustment adjustment) {
-    static const int TIMEOUT_MS_MIN   = 50;
-    static const int TIMEOUT_MS_MAX   = 1000;
-    static const int TIMEOUT_MS_DELTA = 50;
+    static const int TIMEOUT_MS_MIN = 25;
+    static const int TIMEOUT_MS_MAX = 1000;
 
     switch (adjustment) {
-        case RESET:
+        case SET_DEFAULT:
             timeout_ms = TIMEOUT_MS_DEFAULT;
             break;
+        case SET_MIN:
+            timeout_ms = TIMEOUT_MS_MIN;
+            break;
+        case SET_MAX:
+            timeout_ms = TIMEOUT_MS_MAX;
+            break;
         case DECREASE:
-            timeout_ms -= TIMEOUT_MS_DELTA;
+            timeout_ms -= TIMEOUT_MS_MIN;
             if (timeout_ms < TIMEOUT_MS_MIN) timeout_ms = TIMEOUT_MS_MIN;
             break;
         case INCREASE:
-            timeout_ms += TIMEOUT_MS_DELTA;
+            timeout_ms += TIMEOUT_MS_MIN;
             if (timeout_ms > TIMEOUT_MS_MAX) timeout_ms = TIMEOUT_MS_MAX;
             break;
     }
